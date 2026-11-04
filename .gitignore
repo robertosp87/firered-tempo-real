@@ -1,0 +1,10 @@
+# nunca subir o jogo nem saves: o site só tem o patch
+*.gba
+*.gb
+*.gbc
+*.sav
+*.srm
+*.ss[0-9]
+*.zip
+# o patch puro não sobe: só a versão criptografada com a senha (tempo_real.bps.enc)
+tempo_real.bps

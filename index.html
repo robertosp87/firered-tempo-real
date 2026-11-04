@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FireRed Tempo Real</title>
+<style>
+  :root {
+    --bg: #14110f; --card: #211c19; --line: #3a312b; --text: #f3ece6; --dim: #b4a79c;
+    --fire: #e8572c; --fire2: #f5a524; --ok: #7bc96f; --err: #ff7a6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 860px; margin: 0 auto; padding: 24px 16px 48px; }
+  h1 { margin: 0; font-size: 28px; letter-spacing: .5px; }
+  h1 span { color: var(--fire); }
+  .sub { margin: 4px 0 24px; color: var(--dim); }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 20px; margin-bottom: 20px;
+  }
+  .card h2 { margin: 0 0 8px; font-size: 18px; }
+  .card p { margin: 0 0 12px; color: var(--dim); }
+  button, label.btn {
+    display: inline-block; border: 0; border-radius: 8px; padding: 12px 20px; cursor: pointer;
+    font: 600 16px system-ui, sans-serif; color: #1a0f08;
+    background: linear-gradient(180deg, var(--fire2), var(--fire));
+  }
+  button.ghost { background: transparent; color: var(--dim); border: 1px solid var(--line); font-weight: 500; }
+  input[type=file] { display: none; }
+  #status, #passStatus { margin-top: 12px; min-height: 24px; }
+  .ok { color: var(--ok); }
+  .err { color: var(--err); }
+  #passForm { display: flex; gap: 8px; flex-wrap: wrap; }
+  #pass {
+    flex: 1 1 200px; min-width: 0; padding: 12px; border-radius: 8px; font-size: 16px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--text);
+  }
+  #gameWrap { display: none; }
+  #game { width: 100%; aspect-ratio: 3 / 2; background: #000; border-radius: 12px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 6px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td:first-child { width: 120px; font-weight: 600; color: var(--fire2); }
+  .small { font-size: 14px; color: var(--dim); }
+  a { color: var(--fire2); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Pokémon FireRed <span>Tempo Real</span></h1>
+  <p class="sub">Batalhas em tempo real direto no mapa. Joga no navegador, no PC ou no celular.</p>
+
+  <section class="card" id="passCard">
+    <h2>Senha de acesso</h2>
+    <p>Este jogo está em teste fechado. Digite a senha que você recebeu.</p>
+    <form id="passForm">
+      <input type="password" id="pass" autocomplete="current-password" placeholder="Senha" required>
+      <button type="submit">Entrar</button>
+    </form>
+    <div id="passStatus"></div>
+  </section>
+
+  <section class="card" id="romCard" hidden>
+    <h2>Escolha o seu FireRed</h2>
+    <p>Este site não tem o jogo. Escolha o arquivo do <b>Pokémon FireRed (EUA, versão 1.0)</b> que você
+      tem. O patch é aplicado no seu navegador e nada é enviado para a internet.</p>
+    <label class="btn" for="rom">Escolher arquivo .gba</label>
+    <input type="file" id="rom" accept=".gba,.bin">
+    <button class="ghost" id="forget" hidden>Trocar arquivo</button>
+    <div id="status"></div>
+  </section>
+
+  <section id="gameWrap">
+    <div id="game"></div>
+    <p class="small">O progresso fica salvo neste navegador. No menu do emulador dá para baixar e enviar o
+      arquivo de save (.sav) e ajustar os botões.</p>
+  </section>
+
+  <section class="card">
+    <h2>Controles na batalha</h2>
+    <table>
+      <tr><td>Setas</td><td>os 4 golpes (cima, direita, baixo, esquerda)</td></tr>
+      <tr><td>A</td><td>trocar de Pokémon</td></tr>
+      <tr><td>B</td><td>usar poção</td></tr>
+      <tr><td>L</td><td>curar status</td></tr>
+      <tr><td>R</td><td>jogar a Pokébola</td></tr>
+      <tr><td>SELECT</td><td>fugir</td></tr>
+      <tr><td>START</td><td>menu da batalha</td></tr>
+    </table>
+    <p class="small" style="margin-top:12px">No mapa, R solta ou guarda o Pokémon que anda atrás de você.</p>
+  </section>
+
+  <section class="card">
+    <h2>Créditos</h2>
+    <p class="small">Projeto de fã, sem fins lucrativos. Pokémon © Nintendo, Creatures, Game Freak.
+      Feito sobre a decompilação <a href="https://github.com/pret/pokefirered">pret/pokefirered</a>.
+      Sprites dos Pokémon do <a href="https://sprites.pmdcollab.org/">PMD SpriteCollab</a> (artistas
+      creditados lá). Emulador: <a href="https://emulatorjs.org/">EmulatorJS</a> (mGBA).</p>
+  </section>
+</main>
+
+<script src="bps.js"></script>
+<script>
+// o patch vai criptografado com a senha (AES-GCM, chave PBKDF2): sem a senha o arquivo não serve
+const PATCH_URL = 'tempo_real.bps.enc';
+const PASS_KEY = 'rt-senha';
+const statusEl = document.getElementById('status');
+const passStatus = document.getElementById('passStatus');
+const forgetBtn = document.getElementById('forget');
+let patchBytes = null;
+
+function setStatus(msg, kind) {
+  statusEl.textContent = msg;
+  statusEl.className = kind || '';
+}
+
+let encPromise = null;
+function fetchEncrypted() {
+  if (!encPromise)
+    encPromise = fetch(PATCH_URL).then(r => {
+      if (!r.ok) throw new Error('download');
+      return r.arrayBuffer();
+    }).then(b => new Uint8Array(b));
+  return encPromise;
+}
+
+async function decryptPatch(password) {
+  const enc = await fetchEncrypted();
+  if (String.fromCharCode(enc[0], enc[1], enc[2], enc[3]) !== 'RTE1')
+    throw new Error('download');
+  const salt = enc.subarray(4, 20), iv = enc.subarray(20, 32), body = enc.subarray(32);
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+  const key = await crypto.subtle.deriveKey({ name: 'PBKDF2', salt, iterations: 200000, hash: 'SHA-256' },
+    base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+  try {
+    return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv }, key, body));
+  } catch (e) {
+    throw new Error('senha');
+  }
+}
+
+async function unlock(password, fromSaved) {
+  passStatus.textContent = 'Conferindo...';
+  passStatus.className = '';
+  try {
+    patchBytes = await decryptPatch(password);
+  } catch (e) {
+    try { localStorage.removeItem(PASS_KEY); } catch (_) {}
+    passStatus.textContent = fromSaved ? '' : (e.message === 'senha' ? 'Senha errada.' : 'Não deu para baixar o jogo. Recarregue a página.');
+    passStatus.className = 'err';
+    return;
+  }
+  try { localStorage.setItem(PASS_KEY, password); } catch (_) {}
+  document.getElementById('passCard').hidden = true;
+  document.getElementById('romCard').hidden = false;
+  const base = await dbGet();
+  if (base) {
+    setStatus('Usando o FireRed que você escolheu antes.');
+    start(base, false);
+  }
+}
+
+document.getElementById('passForm').addEventListener('submit', e => {
+  e.preventDefault();
+  unlock(document.getElementById('pass').value, false);
+});
+
+// a ROM original fica guardada no navegador para não precisar escolher toda vez
+function db() {
+  return new Promise((ok, fail) => {
+    const req = indexedDB.open('firered-tempo-real', 1);
+    req.onupgradeneeded = () => req.result.createObjectStore('rom');
+    req.onsuccess = () => ok(req.result);
+    req.onerror = () => fail(req.error);
+  });
+}
+async function dbGet() {
+  try {
+    const d = await db();
+    return await new Promise(ok => {
+      const r = d.transaction('rom').objectStore('rom').get('base');
+      r.onsuccess = () => ok(r.result || null);
+      r.onerror = () => ok(null);
+    });
+  } catch (e) { return null; }
+}
+async function dbPut(value) {
+  try {
+    const d = await db();
+    const tx = d.transaction('rom', 'readwrite');
+    if (value) tx.objectStore('rom').put(value, 'base');
+    else tx.objectStore('rom').delete('base');
+  } catch (e) { /* sem armazenamento: só não lembra o arquivo */ }
+}
+
+async function start(base, remember, name) {
+  setStatus('Aplicando o patch...');
+  let rom;
+  try {
+    const patch = patchBytes;
+    await new Promise(r => setTimeout(r, 30));
+    // a própria ROM em tempo real (já com o patch) também serve
+    rom = BPS.crc32(base) === BPS.info(patch).target ? base : BPS.apply(base, patch);
+  } catch (e) {
+    if (e.message === 'rom errada')
+      setStatus('"' + (name || 'arquivo') + '" não é o FireRed EUA versão 1.0 original (código '
+        + BPS.crc32(base).toString(16).toUpperCase() + ', o certo é DD88761C). Use a ROM sem modificações.', 'err');
+    else
+      setStatus('Não deu para aplicar o patch (' + e.message + ').', 'err');
+    return;
+  }
+  // só guarda o original: a ROM já pronta ficaria velha na próxima versão do patch
+  if (remember && rom !== base)
+    dbPut(base);
+  setStatus('Pronto! Carregando o emulador...', 'ok');
+  forgetBtn.hidden = false;
+  document.getElementById('gameWrap').style.display = 'block';
+
+  window.EJS_player = '#game';
+  window.EJS_core = 'gba';
+  window.EJS_gameName = 'FireRed Tempo Real';
+  window.EJS_gameUrl = URL.createObjectURL(new Blob([rom], { type: 'application/octet-stream' }));
+  window.EJS_pathtodata = 'https://cdn.emulatorjs.org/stable/data/';
+  window.EJS_language = 'pt-BR';
+  window.EJS_startOnLoaded = true;
+  window.EJS_color = '#e8572c';
+  // as teclas do jogo não rolam a página (o emulador continua recebendo as teclas)
+  window.addEventListener('keydown', e => {
+    const tag = (e.target.tagName || '').toLowerCase();
+    if (tag === 'input' || tag === 'textarea' || tag === 'select') return;
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'PageUp', 'PageDown', 'Home', 'End'].includes(e.key))
+      e.preventDefault();
+  }, { passive: false });
+  const s = document.createElement('script');
+  s.src = EJS_pathtodata + 'loader.js';
+  document.body.appendChild(s);
+  document.getElementById('gameWrap').scrollIntoView({ behavior: 'smooth' });
+}
+
+document.getElementById('rom').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  start(new Uint8Array(await file.arrayBuffer()), true, file.name);
+  e.target.value = '';
+});
+
+forgetBtn.addEventListener('click', async () => {
+  await dbPut(null);
+  location.reload();
+});
+
+// quem já entrou neste navegador não precisa digitar a senha de novo
+let savedPass = null;
+try { savedPass = localStorage.getItem(PASS_KEY); } catch (_) {}
+if (savedPass)
+  unlock(savedPass, true);
+fetchEncrypted().catch(() => {});
+</script>
+</body>
+</html>
