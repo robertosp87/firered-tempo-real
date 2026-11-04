@@ -146,7 +146,7 @@ async function decryptPatch(password) {
 }
 
 async function unlock(password, fromSaved) {
-  passStatus.textContent = 'Conferindo...';
+  passStatus.textContent = 'Conferindo a senha e baixando o jogo (20 MB)... pode levar alguns segundos.';
   passStatus.className = '';
   try {
     patchBytes = await decryptPatch(password);
