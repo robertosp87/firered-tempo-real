@@ -32,6 +32,7 @@
   button.ghost { background: transparent; color: var(--dim); border: 1px solid var(--line); font-weight: 500; }
   input[type=file] { display: none; }
   #status, #passStatus { margin-top: 12px; min-height: 24px; }
+  [hidden] { display: none !important; }
   .ok { color: var(--ok); }
   .err { color: var(--err); }
   #passForm { display: flex; gap: 8px; flex-wrap: wrap; }
@@ -64,10 +65,12 @@
   </section>
 
   <section class="card" id="romCard" hidden>
-    <h2>Escolha o seu FireRed</h2>
-    <p>Este site não tem o jogo. Escolha o arquivo do <b>Pokémon FireRed (EUA, versão 1.0)</b> que você
-      tem. O patch é aplicado no seu navegador e nada é enviado para a internet.</p>
-    <label class="btn" for="rom">Escolher arquivo .gba</label>
+    <div id="romPick">
+      <h2>Escolha o seu FireRed</h2>
+      <p>Este site não tem o jogo. Escolha o arquivo do <b>Pokémon FireRed (EUA, versão 1.0)</b> que você
+        tem. O patch é aplicado no seu navegador e nada é enviado para a internet.</p>
+      <label class="btn" for="rom">Escolher arquivo .gba</label>
+    </div>
     <input type="file" id="rom" accept=".gba,.bin">
     <button class="ghost" id="forget" hidden>Trocar arquivo</button>
     <div id="status"></div>
@@ -205,17 +208,21 @@ async function start(base, remember, name) {
     // a própria ROM em tempo real (já com o patch) também serve
     rom = BPS.crc32(base) === BPS.info(patch).target ? base : BPS.apply(base, patch);
   } catch (e) {
-    if (e.message === 'rom errada')
+    // a ROM guardada era a do Tempo Real de uma versão antiga: pede o arquivo de novo
+    if (e.message === 'rom errada' && !remember) {
+      dbPut(null);
+      setStatus('Saiu uma versão nova do jogo. Escolha de novo o FireRed original (ou o arquivo novo do Tempo Real).');
+    } else if (e.message === 'rom errada')
       setStatus('"' + (name || 'arquivo') + '" não é o FireRed EUA versão 1.0 original (código '
         + BPS.crc32(base).toString(16).toUpperCase() + ', o certo é DD88761C). Use a ROM sem modificações.', 'err');
     else
       setStatus('Não deu para aplicar o patch (' + e.message + ').', 'err');
     return;
   }
-  // só guarda o original: a ROM já pronta ficaria velha na próxima versão do patch
-  if (remember && rom !== base)
+  if (remember)
     dbPut(base);
-  setStatus('Pronto! Carregando o emulador...', 'ok');
+  setStatus('Jogo carregado. Seu save fica guardado neste navegador.', 'ok');
+  document.getElementById('romPick').hidden = true;
   forgetBtn.hidden = false;
   document.getElementById('gameWrap').style.display = 'block';
 
