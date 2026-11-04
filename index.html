@@ -234,6 +234,21 @@ async function start(base, remember, name) {
   window.EJS_language = 'pt-BR';
   window.EJS_startOnLoaded = true;
   window.EJS_color = '#e8572c';
+  // o EmulatorJS só grava o save no navegador a cada 5 minutos; um F5 antes disso perdia o que
+  // foi salvo no jogo. Grava a cada 5 s e também ao sair da página
+  window.EJS_defaultOptions = { 'save-save-interval': '30' };
+  const flushSave = () => {
+    try {
+      if (window.EJS_emulator && EJS_emulator.started)
+        EJS_emulator.gameManager.saveSaveFiles();
+    } catch (_) {}
+  };
+  window.EJS_onGameStart = () => setInterval(flushSave, 5000);
+  window.addEventListener('pagehide', flushSave);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden')
+      flushSave();
+  });
   // as teclas do jogo não rolam a página (o emulador continua recebendo as teclas)
   window.addEventListener('keydown', e => {
     const tag = (e.target.tagName || '').toLowerCase();
