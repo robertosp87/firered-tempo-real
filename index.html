@@ -2,7 +2,10 @@
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>FireRed Tempo Real</title>
 <style>
   :root {
@@ -42,6 +45,16 @@
   }
   #gameWrap { display: none; }
   #game { width: 100%; aspect-ratio: 3 / 2; background: #000; border-radius: 12px; overflow: hidden; }
+  #gameBar { display: flex; gap: 8px; margin-top: 10px; }
+  /* tela cheia "de mentira" para quando o navegador não deixa (Safari do iPhone) */
+  body.cheia { overflow: hidden; }
+  body.cheia #gameWrap { position: fixed; inset: 0; z-index: 9999; background: #000; }
+  body.cheia #game { width: 100vw; height: 100vh; height: 100dvh; aspect-ratio: auto; border-radius: 0; }
+  body.cheia #gameWrap > p { display: none; }
+  #sairCheia {
+    position: fixed; top: 8px; right: 8px; z-index: 10000; padding: 6px 12px; font-size: 14px;
+    background: rgba(0,0,0,.55); color: #fff; border: 1px solid rgba(255,255,255,.3);
+  }
   table { width: 100%; border-collapse: collapse; }
   td { padding: 6px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
   td:first-child { width: 120px; font-weight: 600; color: var(--fire2); }
@@ -78,6 +91,8 @@
 
   <section id="gameWrap">
     <div id="game"></div>
+    <div id="gameBar"><button id="cheia" type="button">Tela cheia</button></div>
+    <button id="sairCheia" type="button" hidden>Sair da tela cheia</button>
     <p class="small">O progresso fica salvo neste navegador. No menu do emulador dá para baixar e enviar o
       arquivo de save (.sav) e ajustar os botões.</p>
   </section>
@@ -268,6 +283,33 @@ document.getElementById('rom').addEventListener('change', async e => {
   start(new Uint8Array(await file.arrayBuffer()), true, file.name);
   e.target.value = '';
 });
+
+// tela cheia: tenta a do navegador; se o aparelho não deixar, ocupa a janela inteira com CSS
+const wrap = document.getElementById('gameWrap');
+const sairBtn = document.getElementById('sairCheia');
+function setCheia(on) {
+  document.body.classList.toggle('cheia', on);
+  document.getElementById('gameBar').hidden = on;
+  sairBtn.hidden = !on;
+  setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+}
+document.getElementById('cheia').addEventListener('click', async () => {
+  setCheia(true);
+  const req = wrap.requestFullscreen || wrap.webkitRequestFullscreen;
+  try {
+    if (req) await req.call(wrap);
+    if (screen.orientation && screen.orientation.lock) await screen.orientation.lock('landscape');
+  } catch (_) { /* fica na tela cheia de CSS */ }
+});
+sairBtn.addEventListener('click', () => {
+  setCheia(false);
+  const exit = document.exitFullscreen || document.webkitExitFullscreen;
+  if ((document.fullscreenElement || document.webkitFullscreenElement) && exit) exit.call(document);
+});
+['fullscreenchange', 'webkitfullscreenchange'].forEach(ev => document.addEventListener(ev, () => {
+  if (!(document.fullscreenElement || document.webkitFullscreenElement) && document.body.classList.contains('cheia'))
+    setCheia(false);
+}));
 
 forgetBtn.addEventListener('click', async () => {
   await dbPut(null);
