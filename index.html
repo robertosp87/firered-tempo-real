@@ -45,7 +45,9 @@
   }
   #gameWrap { display: none; }
   #game { width: 100%; aspect-ratio: 3 / 2; background: #000; border-radius: 12px; overflow: hidden; }
-  #gameBar { display: flex; gap: 8px; margin-top: 10px; }
+  #gameBar { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  label.btn.ghost { background: transparent; color: var(--dim); border: 1px solid var(--line); font-weight: 500; }
+  #saveStatus { margin-top: 8px; min-height: 20px; }
   /* tela cheia "de mentira" para quando o navegador não deixa (Safari do iPhone) */
   body.cheia { overflow: hidden; }
   body.cheia #gameWrap { position: fixed; inset: 0; z-index: 9999; background: #000; }
@@ -91,10 +93,17 @@
 
   <section id="gameWrap">
     <div id="game"></div>
-    <div id="gameBar"><button id="cheia" type="button">Tela cheia</button></div>
+    <div id="gameBar">
+      <button id="cheia" type="button">Tela cheia</button>
+      <button class="ghost" id="baixarSave" type="button">Baixar save</button>
+      <label class="btn ghost" for="enviarSave">Carregar save (.sav)</label>
+      <input type="file" id="enviarSave" accept=".sav,.srm">
+    </div>
+    <div id="saveStatus" class="small"></div>
     <button id="sairCheia" type="button" hidden>Sair da tela cheia</button>
-    <p class="small">O progresso fica salvo neste navegador. No menu do emulador dá para baixar e enviar o
-      arquivo de save (.sav) e ajustar os botões.</p>
+    <p class="small">O progresso fica salvo neste navegador: depois de salvar no menu do jogo, espere aparecer
+      "Progresso guardado" antes de fechar. Para levar o save para outro aparelho, use Baixar save aqui e
+      Carregar save lá (o arquivo .state do emulador não serve para isso).</p>
   </section>
 
   <section class="card">
@@ -195,24 +204,115 @@ function db() {
     req.onerror = () => fail(req.error);
   });
 }
-async function dbGet() {
+async function dbGet(key = 'base') {
   try {
     const d = await db();
     return await new Promise(ok => {
-      const r = d.transaction('rom').objectStore('rom').get('base');
+      const r = d.transaction('rom').objectStore('rom').get(key);
       r.onsuccess = () => ok(r.result || null);
       r.onerror = () => ok(null);
     });
   } catch (e) { return null; }
 }
-async function dbPut(value) {
+async function dbPut(value, key = 'base') {
   try {
     const d = await db();
     const tx = d.transaction('rom', 'readwrite');
-    if (value) tx.objectStore('rom').put(value, 'base');
-    else tx.objectStore('rom').delete('base');
+    if (value) tx.objectStore('rom').put(value, key);
+    else tx.objectStore('rom').delete(key);
+    await new Promise(ok => { tx.oncomplete = ok; tx.onerror = ok; tx.onabort = ok; });
   } catch (e) { /* sem armazenamento: só não lembra o arquivo */ }
 }
+
+// cópia de segurança do save feita pelo site: o emulador às vezes não termina de gravar no celular
+// antes de a página fechar, e aí o jogo voltava sem save
+const SAVE_SIZE = 131072; // flash de 128 KB do FireRed
+const saveStatus = document.getElementById('saveStatus');
+let lastSaveSum = null;
+function saveSum(b) {
+  let h = 2166136261;
+  for (let i = 0; i < b.length; i++) h = Math.imul(h ^ b[i], 16777619);
+  return h >>> 0;
+}
+function isBlank(b) {
+  for (let i = 0; i < b.length; i++) if (b[i] !== 0xFF && b[i] !== 0) return false;
+  return true;
+}
+function readSrm() {
+  const gm = EJS_emulator.gameManager, p = gm.getSaveFilePath();
+  return gm.FS.analyzePath(p).exists ? gm.FS.readFile(p) : null;
+}
+function writeSrm(bytes) {
+  const gm = EJS_emulator.gameManager, p = gm.getSaveFilePath();
+  const dir = p.substring(0, p.lastIndexOf('/'));
+  if (!gm.FS.analyzePath(dir).exists) gm.FS.mkdir(dir);
+  gm.FS.writeFile(p, bytes);
+  gm.loadSaveFiles();
+  gm.restart();
+}
+function showSaved(time) {
+  const t = new Date(time);
+  saveStatus.textContent = 'Progresso guardado às ' + t.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + '.';
+  saveStatus.className = 'small ok';
+}
+async function backupSave(bytes) {
+  if (!bytes || isBlank(bytes)) return;
+  const sum = saveSum(bytes);
+  if (sum === lastSaveSum) return;
+  lastSaveSum = sum;
+  const time = Date.now();
+  await dbPut({ data: bytes.slice(), time }, 'save');
+  showSaved(time);
+}
+// ao abrir: se o save do emulador sumiu ou ficou para trás, volta a cópia do site
+async function restoreSave() {
+  const backup = await dbGet('save');
+  const srm = readSrm();
+  if (!backup) {
+    if (srm && !isBlank(srm)) backupSave(srm);
+    return;
+  }
+  lastSaveSum = saveSum(backup.data);
+  if (!srm || saveSum(srm) !== lastSaveSum) {
+    writeSrm(backup.data);
+    saveStatus.textContent = 'Save recuperado da cópia guardada neste navegador.';
+    saveStatus.className = 'small ok';
+  } else
+    showSaved(backup.time);
+}
+
+document.getElementById('baixarSave').addEventListener('click', () => {
+  if (!window.EJS_emulator || !EJS_emulator.started) return;
+  EJS_emulator.gameManager.saveSaveFiles();
+  const srm = readSrm();
+  if (!srm || isBlank(srm)) {
+    saveStatus.textContent = 'Ainda não tem jogo salvo. Salve pelo menu do jogo primeiro.';
+    saveStatus.className = 'small err';
+    return;
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([srm], { type: 'application/octet-stream' }));
+  a.download = 'pokefirered_tempo_real.sav';
+  a.click();
+});
+document.getElementById('enviarSave').addEventListener('change', async e => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file || !window.EJS_emulator || !EJS_emulator.started) return;
+  let bytes = new Uint8Array(await file.arrayBuffer());
+  // o mGBA do PC grava 16 bytes a mais no fim (relógio); o jogo só usa os 128 KB
+  if (bytes.length < SAVE_SIZE || bytes.length > SAVE_SIZE + 64 || isBlank(bytes.subarray(0, SAVE_SIZE))) {
+    saveStatus.textContent = '"' + file.name + '" não é um save do FireRed (.sav de 128 KB). O arquivo .state não serve.';
+    saveStatus.className = 'small err';
+    return;
+  }
+  bytes = bytes.slice(0, SAVE_SIZE);
+  writeSrm(bytes);
+  lastSaveSum = null;
+  await backupSave(bytes);
+  saveStatus.textContent = 'Save carregado. Escolha CONTINUAR no jogo.';
+  saveStatus.className = 'small ok';
+});
 
 async function start(base, remember, name) {
   setStatus('Aplicando o patch...');
@@ -254,11 +354,16 @@ async function start(base, remember, name) {
   window.EJS_defaultOptions = { 'save-save-interval': '30' };
   const flushSave = () => {
     try {
-      if (window.EJS_emulator && EJS_emulator.started)
+      if (window.EJS_emulator && EJS_emulator.started) {
         EJS_emulator.gameManager.saveSaveFiles();
+        backupSave(readSrm());
+      }
     } catch (_) {}
   };
-  window.EJS_onGameStart = () => setInterval(flushSave, 5000);
+  window.EJS_onGameStart = async () => {
+    try { await restoreSave(); } catch (_) {}
+    setInterval(flushSave, 3000);
+  };
   window.addEventListener('pagehide', flushSave);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden')
