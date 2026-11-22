@@ -88,6 +88,9 @@
     </div>
     <input type="file" id="rom" accept=".gba,.bin">
     <button class="ghost" id="forget" hidden>Trocar arquivo</button>
+    <button class="ghost" id="baixarJogo" type="button" hidden>Baixar o jogo (.gba)</button>
+    <p class="small" id="baixarDica" hidden>Para jogar fora do navegador: abra o arquivo baixado num emulador de GBA
+      (mGBA no PC; My Boy! ou Pizza Boy no celular). O arquivo é gerado aqui, a partir do seu FireRed.</p>
     <div id="status"></div>
   </section>
 
@@ -314,6 +317,20 @@ document.getElementById('enviarSave').addEventListener('change', async e => {
   saveStatus.className = 'small ok';
 });
 
+// o jogo com o patch, para baixar e jogar num emulador fora do navegador (gerado aqui, nada vem da internet)
+let jogoPronto = null;
+document.getElementById('baixarJogo').addEventListener('click', () => {
+  if (!jogoPronto) return;
+  const url = URL.createObjectURL(new Blob([jogoPronto], { type: 'application/octet-stream' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'FireRed Tempo Real.gba';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
+});
+
 async function start(base, remember, name) {
   setStatus('Aplicando o patch...');
   let rom;
@@ -339,6 +356,9 @@ async function start(base, remember, name) {
   setStatus('Jogo carregado. Seu save fica guardado neste navegador.', 'ok');
   document.getElementById('romPick').hidden = true;
   forgetBtn.hidden = false;
+  jogoPronto = rom;
+  document.getElementById('baixarJogo').hidden = false;
+  document.getElementById('baixarDica').hidden = false;
   document.getElementById('gameWrap').style.display = 'block';
 
   window.EJS_player = '#game';
