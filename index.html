@@ -53,9 +53,10 @@
   body.cheia #gameWrap { position: fixed; inset: 0; z-index: 9999; background: #000; }
   body.cheia #game { width: 100vw; height: 100vh; height: 100dvh; aspect-ratio: auto; border-radius: 0; }
   body.cheia #gameWrap > p { display: none; }
+  /* à esquerda do botão de menu do EmulatorJS (que fica no canto, a 5 px da borda): antes um cobria o outro */
   #sairCheia {
-    position: fixed; top: 8px; right: 8px; z-index: 10000; padding: 6px 12px; font-size: 14px;
-    background: rgba(0,0,0,.55); color: #fff; border: 1px solid rgba(255,255,255,.3);
+    position: fixed; top: 6px; right: 44px; z-index: 10000; padding: 4px 10px; font-size: 13px;
+    background: rgba(0,0,0,.45); color: #fff; border: 1px solid rgba(255,255,255,.3); opacity: .85;
   }
   table { width: 100%; border-collapse: collapse; }
   td { padding: 6px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
