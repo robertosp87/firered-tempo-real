@@ -395,7 +395,29 @@ async function start(base, remember, name) {
   window.EJS_onGameStart = async () => {
     try { await restoreSave(); } catch (_) {}
     setInterval(flushSave, 3000);
+    requestAnimationFrame(analogico);
   };
+  // controle de PS4/Xbox: o EmulatorJS só liga o direcional digital no GBA; o analógico esquerdo vira direcional
+  // aqui (inclinou mais da metade = apertou). Só manda quando muda, para não brigar com o direcional de verdade
+  const ANALOG_ZONA = 0.5;
+  const analogAntes = { 4: 0, 5: 0, 6: 0, 7: 0 };   // CIMA, BAIXO, ESQUERDA, DIREITA (ids do EmulatorJS no GBA)
+  function analogico() {
+    requestAnimationFrame(analogico);
+    if (!window.EJS_emulator || !EJS_emulator.started || !navigator.getGamepads) return;
+    let x = 0, y = 0;
+    for (const g of navigator.getGamepads()) {
+      if (!g || g.axes.length < 2) continue;
+      if (Math.abs(g.axes[0]) > Math.abs(x)) x = g.axes[0];
+      if (Math.abs(g.axes[1]) > Math.abs(y)) y = g.axes[1];
+    }
+    const agora = { 4: y < -ANALOG_ZONA ? 1 : 0, 5: y > ANALOG_ZONA ? 1 : 0,
+                    6: x < -ANALOG_ZONA ? 1 : 0, 7: x > ANALOG_ZONA ? 1 : 0 };
+    for (const k in agora)
+      if (agora[k] !== analogAntes[k]) {
+        analogAntes[k] = agora[k];
+        try { EJS_emulator.gameManager.simulateInput(0, Number(k), agora[k]); } catch (_) {}
+      }
+  }
   window.addEventListener('pagehide', flushSave);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'hidden')
